@@ -33,10 +33,11 @@ async function hydrateAdmin(root){
 }
 
 function RawPage({source,admin=false}){
-  const navigate=useNavigate(); const {session}=useAuth(); const [html]=useState(()=>bodyOf(source));
+  const navigate=useNavigate(); const {session,profile}=useAuth(); const [html]=useState(()=>bodyOf(source));
   useEffect(()=>{
     const root=document.querySelector('.raw-page'); if(!root)return;
     if(admin) hydrateAdmin(root);
+    if(!admin && profile?.name){const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${profile.name}.`;}
     const header=root.querySelector('.site-header');
     const onScroll=()=>header?.classList.toggle('scrolled',scrollY>12); window.addEventListener('scroll',onScroll,{passive:true});
     const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target)}}),{threshold:.12});
@@ -62,7 +63,7 @@ function RawPage({source,admin=false}){
     const adminClick=e=>{e.preventDefault();const name=e.currentTarget.dataset.page;root.querySelectorAll('.page-section').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));navItems.forEach(n=>n.classList.toggle('active',n===e.currentTarget));const crumb=root.querySelector('#breadcrumbText');if(crumb)crumb.textContent=e.currentTarget.textContent.trim();history.replaceState(null,'',`#${name}`)};
     navItems.forEach(n=>n.addEventListener('click',adminClick));
     return()=>{window.removeEventListener('scroll',onScroll);observer.disconnect();root.removeEventListener('click',delegatedMenuClick,true);links.forEach(l=>l.removeEventListener('click',guard));navItems.forEach(n=>n.removeEventListener('click',adminClick));faqHandlers.forEach(([summary,handler])=>summary?.removeEventListener('click',handler))};
-  },[navigate,session]);
+  },[navigate,session,profile]);
   return <div className={`raw-page ${admin?'raw-admin':''}`} dangerouslySetInnerHTML={{__html:html}}/>;
 }
 export function LegacyLanding(){return <RawPage source={landingSource}/>}
