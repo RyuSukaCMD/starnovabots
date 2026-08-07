@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
   async function loadProfile(id) { const { data } = await supabase.from('profiles').select('*').eq('id', id).single(); setProfile(data); setLoading(false); }
   async function signIn(email, password) { if (!supabase) throw new Error('Supabase belum dikonfigurasi. Isi file .env terlebih dahulu.'); const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; }
   async function signUp(email, password, name) { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } }); if (error) throw error; }
-  async function signInWithOtp(email) { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } }); if (error) throw error; }
+  async function signInWithOtp(email, name='') { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const options = { shouldCreateUser: true }; if (name) options.data = { name }; const { error } = await supabase.auth.signInWithOtp({ email, options }); if (error) throw error; }
   async function verifyOtp(email, token) { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' }); if (error) throw error; }
   async function signInWithGoogle() { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/login' } }); if (error) throw error; }
   async function signOut() { await supabase?.auth.signOut(); }
