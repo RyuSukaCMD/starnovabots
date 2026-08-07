@@ -1,4 +1,5 @@
 -- Starnova production schema for Supabase
+create extension if not exists pgcrypto;
 create type public.app_role as enum ('owner','user','jadibot','scriptbuyer','sewa','admin','support');
 create type public.purchase_status as enum ('pending','paid','active','cancelled');
 create table public.profiles (
