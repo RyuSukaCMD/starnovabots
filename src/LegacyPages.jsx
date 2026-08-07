@@ -8,6 +8,13 @@ import '../legacy-admin.css';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 function bodyOf(source){ return source.replace(/<script[\s\S]*?<\/script>/gi,'').match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || source; }
+function clearAdminData(root){
+  root.querySelectorAll('.metric-card strong').forEach(metric=>metric.textContent='—');
+  root.querySelectorAll('table tbody').forEach(body=>body.innerHTML='<tr><td colspan="6" class="empty-state">Database belum dikonfigurasi.</td></tr>');
+  root.querySelectorAll('.product-rank').forEach(row=>row.remove());
+  root.querySelectorAll('.admin-product-card h2,.admin-product-card p').forEach((el,i)=>{if(i%2===0)el.textContent='Data belum tersedia';else el.textContent='Hubungkan Supabase untuk memuat data live.'});
+}
+
 async function hydrateAdmin(root){
   if(!isSupabaseConfigured || !supabase) return;
   root.querySelectorAll('table tbody').forEach(body=>body.innerHTML='<tr><td colspan="6" class="empty-state">Memuat data live…</td></tr>');
@@ -28,7 +35,9 @@ async function hydrateAdmin(root){
   const ordersBody=root.querySelector('#page-orders table tbody'); if(ordersBody) ordersBody.innerHTML=(orders||[]).map(order=>{const person=order.profiles?.name||order.profiles?.email||'Pengguna';const product=order.products?`${order.products.name} — ${order.products.plan}`:order.product_name;return `<tr><td><strong class="invoice">#${order.id.slice(0,8).toUpperCase()}</strong></td><td>${person}</td><td>${product}</td><td><span class="status ${statusClass[order.status]||'pending'}">${statusLabel[order.status]||order.status}</span></td><td class="amount">${money(order.amount)}</td><td>${date(order.created_at)}</td></tr>`}).join('')||'<tr><td colspan="6" class="empty-state">Belum ada pesanan.</td></tr>';
   const usersBody=root.querySelector('#page-users table tbody'); if(usersBody) usersBody.innerHTML=(users||[]).map(user=>`<tr><td><div class="customer"><span class="customer-avatar a2">${initials(user.name||user.email)}</span><div><strong>${user.name||'Tanpa nama'}</strong><small>${user.email}</small></div></div></td><td><span class="role-tag user">${user.role}</span></td><td>${(orders||[]).filter(o=>o.user_id===user.id&&['paid','active'].includes(o.status)).length} produk</td><td>${date(user.created_at)}</td><td><span class="status success">Aktif</span></td><td class="row-more">•••</td></tr>`).join('')||'<tr><td colspan="6" class="empty-state">Belum ada user.</td></tr>';
   const metrics=root.querySelectorAll('.metric-card strong'); if(metrics.length>=4){metrics[0].textContent=money((orders||[]).filter(o=>['paid','active'].includes(o.status)).reduce((sum,o)=>sum+Number(o.amount||0),0));metrics[1].textContent=(users||[]).length;metrics[2].textContent=(orders||[]).length;metrics[3].textContent=(orders||[]).filter(o=>o.status==='active').length;}
-  root.querySelectorAll('.admin-product-card').forEach((card,i)=>{const product=products?.[i];if(product){const title=card.querySelector('h2');const desc=card.querySelector('p');if(title)title.textContent=product.name;if(desc)desc.textContent=product.description||product.plan;}});
+  const monthRevenue=Array.from({length:6},(_,index)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-(5-index));return (orders||[]).filter(order=>{const x=new Date(order.created_at);return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear()&&['paid','active'].includes(order.status)}).reduce((sum,order)=>sum+Number(order.amount||0),0)});const maxRevenue=Math.max(...monthRevenue,1);root.querySelectorAll('.revenue-panel .bars>div i').forEach((bar,index)=>{bar.style.height=`${Math.max(8,Math.round(monthRevenue[index]/maxRevenue*100))}%`});
+  const ranked=Object.entries((orders||[]).reduce((acc,order)=>{const key=order.product_name||order.product_id;acc[key]=(acc[key]||0)+1;return acc},{})).sort((a,b)=>b[1]-a[1]).slice(0,3);const rankPanel=root.querySelector('.orders-panel');if(rankPanel){rankPanel.querySelectorAll('.product-rank').forEach(row=>row.remove());ranked.forEach(([name,count],index)=>{const row=document.createElement('div');row.className='product-rank';row.innerHTML=`<span class="rank-num">${String(index+1).padStart(2,'0')}</span><span class="rank-icon ${['purple-bg','blue-bg','pink-bg'][index]||'purple-bg'}">${index+1}</span><div><strong>${name}</strong><small>${count} pesanan</small></div><b>${Math.round(count/Math.max((orders||[]).length,1)*100)}%</b>`;rankPanel.appendChild(row)})}
+  root.querySelectorAll('.admin-product-card').forEach((card,i)=>{const product=products?.[i];if(product){const title=card.querySelector('h2');const desc=card.querySelector('p');const meta=card.querySelectorAll('.admin-product-meta span');const activeOrders=(orders||[]).filter(order=>order.product_id===product.id&&['paid','active'].includes(order.status)).length;if(title)title.textContent=product.name;if(desc)desc.textContent=product.description||product.plan;if(meta[0])meta[0].textContent=money(product.price);if(meta[1])meta[1].textContent=`${activeOrders} pelanggan`;}});
   root.querySelectorAll('table tbody tr').forEach(row=>row.addEventListener('click',()=>row.classList.add('selected-row')));
 }
 
@@ -36,7 +45,7 @@ function RawPage({source,admin=false}){
   const navigate=useNavigate(); const {session,profile}=useAuth(); const [html]=useState(()=>bodyOf(source));
   useEffect(()=>{
     const root=document.querySelector('.raw-page'); if(!root)return;
-    if(admin) hydrateAdmin(root);
+    if(admin){if(isSupabaseConfigured) hydrateAdmin(root);else clearAdminData(root);}
     if(!admin){const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${profile?.name||'User'}.`;}
     const header=root.querySelector('.site-header');
     const onScroll=()=>header?.classList.toggle('scrolled',scrollY>12); window.addEventListener('scroll',onScroll,{passive:true});
