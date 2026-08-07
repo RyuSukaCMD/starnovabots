@@ -44,8 +44,9 @@ function RawPage({source,admin=false}){
     const links=root.querySelectorAll('a[href*="wa.me"],a[href*="whatsapp"]');
     const guard=e=>{if(!session){e.preventDefault();navigate('/login?next=checkout')}}; links.forEach(l=>l.addEventListener('click',guard));
     const faqItems=root.querySelectorAll('.faq-list details');
-    const faqHandlers=[];
-    faqItems.forEach(item=>{const summary=item.querySelector('summary');const handler=e=>{e.preventDefault();if(item.open){item.classList.add('is-closing');setTimeout(()=>{item.open=false;item.classList.remove('is-closing')},380)}else{faqItems.forEach(other=>{if(other!==item){other.open=false;other.classList.remove('is-closing')}});item.open=true;item.classList.add('is-opening');requestAnimationFrame(()=>item.classList.remove('is-opening'))}};summary?.addEventListener('click',handler);faqHandlers.push([summary,handler])});
+    const faqHandlers=[]; const faqTimers=new WeakMap();
+    const closeFaq=item=>{if(!item.open)return;clearTimeout(faqTimers.get(item));item.classList.add('is-closing');item.classList.remove('faq-visible');const timer=setTimeout(()=>{item.open=false;item.classList.remove('is-closing')},390);faqTimers.set(item,timer)};
+    faqItems.forEach(item=>{const summary=item.querySelector('summary');if(item.open)item.classList.add('faq-visible');const handler=e=>{e.preventDefault();clearTimeout(faqTimers.get(item));if(item.open){closeFaq(item)}else{faqItems.forEach(other=>{if(other!==item)closeFaq(other)});item.open=true;item.offsetHeight;requestAnimationFrame(()=>{item.classList.add('faq-visible','is-opening');requestAnimationFrame(()=>item.classList.remove('is-opening'))})}};summary?.addEventListener('click',handler);faqHandlers.push([summary,handler])});
     const menuToggle=root.querySelector('.menu-toggle');
     const siteNav=root.querySelector('.nav');
     const toggleMenu=()=>{const open=siteNav?.classList.toggle('menu-open');menuToggle?.setAttribute('aria-expanded',String(Boolean(open)))};
