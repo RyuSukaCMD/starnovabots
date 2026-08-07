@@ -23,7 +23,7 @@ update public.profiles set role = 'owner' where email = 'your-email@example.com'
 
 5. Add the environment variables from `.env.example`.
 
-The role model is `user`, `support`, `admin`, and `owner`. Only `admin` and `owner` can access `/admin`; all sensitive access is enforced again by Supabase RLS, not only by the frontend.
+Login production memakai dua opsi: OTP email dan Google OAuth. Aktifkan Email provider di Supabase Auth, lalu aktifkan Google provider dan isi Client ID/Secret di Supabase. Tambahkan URL callback `https://domainmu.com/login` dan URL preview/local yang digunakan ke Authentication > URL Configuration. Tidak ada password yang dikelola oleh UI. Role model adalah `user`, `support`, `admin`, dan `owner`. Only `admin` dan `owner` dapat mengakses `/admin`; semua akses sensitif tetap ditegakkan oleh Supabase RLS, bukan hanya frontend.
 
 ## Vercel
 
