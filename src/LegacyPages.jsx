@@ -9,13 +9,14 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 function bodyOf(source){ return source.replace(/<script[\s\S]*?<\/script>/gi,'').match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || source; }
 function clearAdminData(root){
+  const overview=root.querySelector('#page-overview .page-header');if(overview){const dateNode=overview.querySelector('.eyebrow');if(dateNode)dateNode.textContent=new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(new Date());const title=overview.querySelector('h1');if(title&&title.firstChild)title.firstChild.nodeValue='Selamat pagi, User ';const subtitle=overview.querySelector('p');if(subtitle)subtitle.textContent='Database belum dikonfigurasi.';}
   root.querySelectorAll('.metric-card strong').forEach(metric=>metric.textContent='—');
   root.querySelectorAll('table tbody').forEach(body=>body.innerHTML='<tr><td colspan="6" class="empty-state">Database belum dikonfigurasi.</td></tr>');
   root.querySelectorAll('.product-rank').forEach(row=>row.remove());
   root.querySelectorAll('.admin-product-card h2,.admin-product-card p').forEach((el,i)=>{if(i%2===0)el.textContent='Data belum tersedia';else el.textContent='Hubungkan Supabase untuk memuat data live.'});
 }
 
-async function hydrateAdmin(root){
+async function hydrateAdmin(root, currentProfile){
   if(!isSupabaseConfigured || !supabase) return;
   root.querySelectorAll('table tbody').forEach(body=>body.innerHTML='<tr><td colspan="6" class="empty-state">Memuat data live…</td></tr>');
   root.querySelectorAll('.metric-card strong').forEach(metric=>metric.textContent='—');
@@ -29,6 +30,9 @@ async function hydrateAdmin(root){
   const date=value=>new Intl.DateTimeFormat('id-ID',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value));
   const initials=value=>(value||'SN').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
   const statusLabel={paid:'Berhasil',active:'Aktif',pending:'Menunggu',cancelled:'Dibatalkan'};
+  const overview=root.querySelector('#page-overview .page-header');
+  if(overview){const dateNode=overview.querySelector('.eyebrow');if(dateNode)dateNode.textContent=new Intl.DateTimeFormat('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).format(new Date());const title=overview.querySelector('h1');if(title&&title.firstChild)title.firstChild.nodeValue=`Selamat pagi, ${currentProfile?.name||'User'} `;const subtitle=overview.querySelector('p');if(subtitle)subtitle.textContent=`${(users||[]).length} user dan ${(orders||[]).length} pesanan tercatat di workspace ini.`;}
+
   const statusClass={paid:'success',active:'success',pending:'pending',cancelled:'pending'};
   const orderRows=(orders||[]).map(order=>{const person=order.profiles?.name||order.profiles?.email||'Pengguna';const product=order.products?`${order.products.name} — ${order.products.plan}`:order.product_name;return `<tr><td><div class="customer"><span class="customer-avatar a1">${initials(person)}</span><div><strong>${person}</strong><small>${order.profiles?.email||'—'}</small></div></div></td><td>${product}</td><td>${date(order.created_at)}</td><td><span class="status ${statusClass[order.status]||'pending'}">${statusLabel[order.status]||order.status}</span></td><td class="amount">${money(order.amount)}</td></tr>`}).join('');
   const overviewBody=root.querySelector('#page-overview table tbody'); if(overviewBody) overviewBody.innerHTML=orderRows||'<tr><td colspan="5" class="empty-state">Belum ada pesanan.</td></tr>';
@@ -45,7 +49,7 @@ function RawPage({source,admin=false}){
   const navigate=useNavigate(); const {session,profile}=useAuth(); const [html]=useState(()=>bodyOf(source));
   useEffect(()=>{
     const root=document.querySelector('.raw-page'); if(!root)return;
-    if(admin){if(isSupabaseConfigured) hydrateAdmin(root);else clearAdminData(root);}
+    if(admin){if(isSupabaseConfigured) hydrateAdmin(root,profile);else clearAdminData(root);}
     if(!admin){const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${profile?.name||'User'}.`;}
     const header=root.querySelector('.site-header');
     const onScroll=()=>header?.classList.toggle('scrolled',scrollY>12); window.addEventListener('scroll',onScroll,{passive:true});
