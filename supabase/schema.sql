@@ -1,5 +1,5 @@
 -- Starnova production schema for Supabase
-create type public.app_role as enum ('user','support','admin','owner');
+create type public.app_role as enum ('owner','user','jadibot','scriptbuyer','sewa','admin','support');
 create type public.purchase_status as enum ('pending','paid','active','cancelled');
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -29,7 +29,7 @@ create table public.purchases (
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path = public as $$
 begin insert into public.profiles(id,email,name) values(new.id,new.email,new.raw_user_meta_data->>'name'); return new; end; $$;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
-create or replace function public.is_staff() returns boolean language sql stable security definer set search_path = public as $$ select exists(select 1 from public.profiles where id=auth.uid() and role in ('admin','owner')); $$;
+create or replace function public.is_staff() returns boolean language sql stable security definer set search_path = public as $$ select exists(select 1 from public.profiles where id=auth.uid() and role = 'owner'); $$;
 alter table public.profiles enable row level security; alter table public.products enable row level security; alter table public.purchases enable row level security;
 create policy "profiles self read" on public.profiles for select using (id=auth.uid() or public.is_staff());
 create policy "products public read" on public.products for select using (active=true or public.is_staff());

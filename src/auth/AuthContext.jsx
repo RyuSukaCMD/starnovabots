@@ -18,7 +18,8 @@ export function AuthProvider({ children }) {
   async function signInWithOtp(email, name='') { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const options = { shouldCreateUser: true }; if (name) options.data = { name }; const { error } = await supabase.auth.signInWithOtp({ email, options }); if (error) throw error; }
   async function verifyOtp(email, token) { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' }); if (error) throw error; }
   async function signInWithGoogle() { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/login' } }); if (error) throw error; }
+  async function updateProfileName(name) { if (!supabase || !session?.user) throw new Error('Supabase belum dikonfigurasi.'); const { data, error } = await supabase.from('profiles').update({ name }).eq('id', session.user.id).select('*').single(); if (error) throw error; setProfile(data); return data; }
   async function signOut() { await supabase?.auth.signOut(); }
-  return <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithOtp, verifyOtp, signInWithGoogle, signOut, configured: isSupabaseConfigured }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithOtp, verifyOtp, signInWithGoogle, updateProfileName, signOut, configured: isSupabaseConfigured }}>{children}</AuthContext.Provider>;
 }
 export const useAuth = () => useContext(AuthContext);

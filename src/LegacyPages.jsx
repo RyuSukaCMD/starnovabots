@@ -66,4 +66,4 @@ function RawPage({source,admin=false}){
   return <div className={`raw-page ${admin?'raw-admin':''}`} dangerouslySetInnerHTML={{__html:html}}/>;
 }
 export function LegacyLanding(){return <RawPage source={landingSource}/>}
-export function LegacyAdmin(){const {profile,loading}=useAuth();if(loading)return null;if(!profile||!['admin','owner'].includes(profile.role))return <RawPage source={landingSource}/>;return <RawPage source={adminSource} admin/>}
+export function LegacyAdmin(){const {profile,loading}=useAuth();if(loading)return null;if(!profile||profile.role!=='owner')return <RawPage source={landingSource}/>;return <RawPage source={adminSource} admin/>}
