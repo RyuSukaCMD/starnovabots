@@ -49,8 +49,11 @@ begin insert into public.profiles(id,email,username,name,display_name,avatar,pro
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 create or replace function public.is_username_available(candidate text, current_user uuid default auth.uid()) returns boolean language sql stable security definer set search_path = public as $$ select candidate ~ '^[a-z0-9_]{3,24}$' and not exists(select 1 from public.profiles where lower(username)=lower(candidate) and id<>current_user); $$;
 create or replace function public.is_staff() returns boolean language sql stable security definer set search_path = public as $$ select exists(select 1 from public.profiles where id=auth.uid() and role = 'owner'); $$;
+grant execute on function public.is_username_available(text, uuid) to authenticated;
 alter table public.profiles enable row level security; alter table public.products enable row level security; alter table public.purchases enable row level security;
 create policy "profiles self read" on public.profiles for select using (id=auth.uid() or public.is_staff());
+create policy "profiles self update" on public.profiles for update using (id=auth.uid()) with check (id=auth.uid());
+create policy "owner manage profiles" on public.profiles for all using (public.is_staff()) with check (public.is_staff());
 create policy "products public read" on public.products for select using (active=true or public.is_staff());
 create policy "purchases own read" on public.purchases for select using (user_id=auth.uid() or public.is_staff());
 create policy "purchases own insert" on public.purchases for insert with check (user_id=auth.uid());
