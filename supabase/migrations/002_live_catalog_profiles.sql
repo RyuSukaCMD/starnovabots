@@ -16,4 +16,4 @@ alter table public.products add column if not exists image_icon text;
 alter table public.products add column if not exists plans jsonb not null default '[]'::jsonb;
 alter table public.purchases add column if not exists quantity integer not null default 1;
 alter table public.purchases add column if not exists duration integer;
-create or replace function public.is_username_available(candidate text, current_user uuid default auth.uid()) returns boolean language sql stable security definer set search_path=public as $$ select candidate ~ '^[a-z0-9_]{3,24}$' and not exists(select 1 from public.profiles where lower(username)=lower(candidate) and id<>current_user); $$;
+create or replace function public.is_username_available(candidate text, requesting_user uuid default auth.uid()) returns boolean language sql stable security definer set search_path=public as $$ select candidate ~ '^[a-z0-9_]{3,24}$' and not exists(select 1 from public.profiles where lower(username)=lower(candidate) and id<>requesting_user); $$;
