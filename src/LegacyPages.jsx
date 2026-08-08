@@ -50,7 +50,7 @@ function RawPage({source,admin=false}){
   useEffect(()=>{
     const root=document.querySelector('.raw-page'); if(!root)return;
     if(admin){if(isSupabaseConfigured) hydrateAdmin(root,profile);else clearAdminData(root);}
-    if(!admin){const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${profile?.name||'User'}.`;}
+    if(!admin){const renderGreeting=data=>{const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${data?.display_name||data?.username||data?.name||profile?.display_name||profile?.username||profile?.name||'User'}.`};renderGreeting(profile);if(session&&supabase){supabase.from('profiles').select('username,name,display_name').eq('id',session.user.id).single().then(({data})=>renderGreeting(data))}}
     const header=root.querySelector('.site-header');
     const onScroll=()=>header?.classList.toggle('scrolled',scrollY>12); window.addEventListener('scroll',onScroll,{passive:true});
     const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target)}}),{threshold:.12});
