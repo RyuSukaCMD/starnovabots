@@ -268,3 +268,48 @@ with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()
 create policy "avatar user update" on storage.objects for update to authenticated
 using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
 with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Profile change cooldowns
+alter table public.profiles add column if not exists username_changed_at timestamptz;
+alter table public.profiles add column if not exists nickname_changed_at timestamptz;
+
+create or replace function public.update_profile_identity(
+  new_username text,
+  new_display_name text
+)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_profile public.profiles;
+  updated_profile public.profiles;
+  normalized_username text := lower(trim(new_username));
+  normalized_display_name text := trim(new_display_name);
+begin
+  select * into current_profile from public.profiles where id = auth.uid() for update;
+  if current_profile.id is null then raise exception 'Profile tidak ditemukan'; end if;
+  if normalized_username !~ '^[a-z0-9_]{3,24}$' then raise exception 'Username tidak valid'; end if;
+  if normalized_display_name = '' then raise exception 'Nickname tidak boleh kosong'; end if;
+  if normalized_username is distinct from lower(coalesce(current_profile.username, current_profile.name,'')) then
+    if current_profile.username_changed_at is not null and current_profile.username_changed_at > now() - interval '7 days' then
+      raise exception 'Username hanya dapat diganti setiap 7 hari';
+    end if;
+    if exists(select 1 from public.profiles where lower(username)=normalized_username and id<>auth.uid()) then
+      raise exception 'Username sudah digunakan';
+    end if;
+  end if;
+  if normalized_display_name is distinct from coalesce(current_profile.display_name,current_profile.name,'') then
+    if current_profile.nickname_changed_at is not null and current_profile.nickname_changed_at > now() - interval '24 hours' then
+      raise exception 'Nickname hanya dapat diganti setiap 24 jam';
+    end if;
+  end if;
+  update public.profiles set username=normalized_username, name=normalized_username, display_name=normalized_display_name,
+    username_changed_at=case when normalized_username is distinct from lower(coalesce(current_profile.username,current_profile.name,'')) then now() else current_profile.username_changed_at end,
+    nickname_changed_at=case when normalized_display_name is distinct from coalesce(current_profile.display_name,current_profile.name,'') then now() else current_profile.nickname_changed_at end,
+    updated_at=now() where id=auth.uid() returning * into updated_profile;
+  return updated_profile;
+end;
+$$;
+grant execute on function public.update_profile_identity(text,text) to authenticated;
