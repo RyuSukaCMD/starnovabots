@@ -52,6 +52,8 @@ function RawPage({source,admin=false}){
     if(admin){if(isSupabaseConfigured) hydrateAdmin(root,profile);else clearAdminData(root);}
     if(!admin){const renderGreeting=data=>{const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${data?.display_name||data?.username||data?.name||profile?.display_name||profile?.username||profile?.name||'User'}.`};renderGreeting(profile);if(session&&supabase){supabase.from('profiles').select('username,name,display_name').eq('id',session.user.id).single().then(({data})=>renderGreeting(data))}}
     const header=root.querySelector('.site-header');
+    const profileUpdated=e=>{if(!admin){const d=e.detail;const greeting=root.querySelector('.dash-greeting strong');if(greeting)greeting.textContent=`${d?.display_name||d?.username||d?.name||'User'}.`}};
+    window.addEventListener('starnova-profile-updated',profileUpdated);
     const onScroll=()=>header?.classList.toggle('scrolled',scrollY>12); window.addEventListener('scroll',onScroll,{passive:true});
     const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target)}}),{threshold:.12});
     root.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
@@ -78,7 +80,7 @@ function RawPage({source,admin=false}){
     const navItems=admin?root.querySelectorAll('.nav-item[data-page]'):[];
     const adminClick=e=>{e.preventDefault();const name=e.currentTarget.dataset.page;root.querySelectorAll('.page-section').forEach(p=>p.classList.toggle('active',p.id===`page-${name}`));navItems.forEach(n=>n.classList.toggle('active',n===e.currentTarget));const crumb=root.querySelector('#breadcrumbText');if(crumb)crumb.textContent=e.currentTarget.textContent.trim();history.replaceState(null,'',`#${name}`)};
     navItems.forEach(n=>n.addEventListener('click',adminClick));
-    return()=>{window.removeEventListener('scroll',onScroll);observer.disconnect();root.removeEventListener('click',delegatedMenuClick,true);links.forEach(l=>l.removeEventListener('click',guard));productCleanups.forEach(cleanup=>cleanup());navItems.forEach(n=>n.removeEventListener('click',adminClick));faqHandlers.forEach(([summary,handler])=>summary?.removeEventListener('click',handler))};
+    return()=>{window.removeEventListener('scroll',onScroll);window.removeEventListener('starnova-profile-updated',profileUpdated);observer.disconnect();root.removeEventListener('click',delegatedMenuClick,true);links.forEach(l=>l.removeEventListener('click',guard));productCleanups.forEach(cleanup=>cleanup());navItems.forEach(n=>n.removeEventListener('click',adminClick));faqHandlers.forEach(([summary,handler])=>summary?.removeEventListener('click',handler))};
   },[navigate,session,profile]);
   return <div className={`raw-page ${admin?'raw-admin':''}`} dangerouslySetInnerHTML={{__html:html}}/>;
 }

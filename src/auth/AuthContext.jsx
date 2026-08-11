@@ -12,7 +12,8 @@ export function AuthProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); if (next) loadProfile(next.user.id); else { setProfile(null); setLoading(false); } });
     return () => listener.subscription.unsubscribe();
   }, []);
-  async function loadProfile(id) { const { data } = await supabase.from('profiles').select('*').eq('id', id).single(); setProfile(data); setLoading(false); }
+  async function loadProfile(id) { const { data } = await supabase.from('profiles').select('*').eq('id', id).single(); setProfile(data || null); setLoading(false); return data; }
+  async function refreshProfile() { if (!supabase || !session?.user?.id) return null; const fresh = await loadProfile(session.user.id); window.dispatchEvent(new CustomEvent('starnova-profile-updated', { detail: fresh })); return fresh; }
   async function signIn(email, password) { if (!supabase) throw new Error('Supabase belum dikonfigurasi. Isi file .env terlebih dahulu.'); const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; }
   async function signUp(email, password, name) { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } }); if (error) throw error; }
   async function signInWithOtp(email, name='') { if (!supabase) throw new Error('Supabase belum dikonfigurasi.'); const options = { shouldCreateUser: true }; if (name) options.data = { name }; const { error } = await supabase.auth.signInWithOtp({ email, options }); if (error) throw error; }
@@ -23,6 +24,6 @@ export function AuthProvider({ children }) {
   async function updateProfileFields(fields) { if (!supabase || !session?.user) throw new Error('Supabase belum dikonfigurasi.'); let result = await supabase.from('profiles').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', session.user.id).select('*').single(); if (result.error && /column|schema cache|display_name|avatar|updated_at/i.test(result.error.message||'')) { result = await supabase.from('profiles').update({ name: fields.display_name || fields.name || fields.username }).eq('id', session.user.id).select('*').single(); } if (result.error) throw result.error; setProfile(result.data); return result.data; }
   async function updateProfileIdentity(username, nickname) { if (!supabase || !session?.user) throw new Error('Supabase belum dikonfigurasi.'); const { data, error } = await supabase.rpc('update_profile_identity', { new_username: username, new_display_name: nickname }); if (error) throw error; setProfile(data); return data; }
   async function signOut() { await supabase?.auth.signOut(); }
-  return <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithOtp, verifyOtp, signInWithGoogle, checkUsername, updateUsername, updateProfileFields, updateProfileIdentity, signOut, configured: isSupabaseConfigured }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithOtp, verifyOtp, signInWithGoogle, checkUsername, updateUsername, updateProfileFields, updateProfileIdentity, refreshProfile, signOut, configured: isSupabaseConfigured }}>{children}</AuthContext.Provider>;
 }
 export const useAuth = () => useContext(AuthContext);
