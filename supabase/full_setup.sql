@@ -382,3 +382,25 @@ begin
  return jsonb_build_object('id',r.id,'code',r.code,'discount',discount,'final_amount',greatest(order_amount-discount,0),'discount_type',r.discount_type,'discount_value',r.discount_value);
 end; $$;
 grant execute on function public.validate_redeem_code(text,numeric) to authenticated;
+
+-- Redeem constraints: minimum order and optional never-expire
+alter table public.redeem_codes add column if not exists min_order_amount numeric(12,2) not null default 0;
+alter table public.redeem_codes add column if not exists never_expires boolean not null default false;
+
+create or replace function public.validate_redeem_code(input_code text, order_amount numeric)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.redeem_codes; p public.profiles; discount numeric:=0;
+begin
+ select * into r from public.redeem_codes where upper(code)=upper(trim(input_code)) and active=true for update;
+ if r.id is null then raise exception 'Redeem code tidak ditemukan atau tidak aktif'; end if;
+ if r.min_order_amount > order_amount then raise exception 'Minimum pembelian untuk kode ini adalah %', r.min_order_amount; end if;
+ if not coalesce(r.never_expires,false) and r.starts_at is not null and now()<r.starts_at then raise exception 'Redeem code belum dapat digunakan'; end if;
+ if not coalesce(r.never_expires,false) and r.expires_at is not null and now()>r.expires_at then raise exception 'Redeem code sudah kedaluwarsa'; end if;
+ if r.max_uses is not null and r.used_count>=r.max_uses then raise exception 'Batas penggunaan redeem code sudah tercapai'; end if;
+ if r.user_id is not null and r.user_id<>auth.uid() then raise exception 'Redeem code bukan untuk akun ini'; end if;
+ if exists(select 1 from public.redeem_redemptions where redeem_code_id=r.id and user_id=auth.uid()) then raise exception 'Redeem code sudah pernah digunakan'; end if;
+ select * into p from public.profiles where id=auth.uid();
+ if p.created_at > now() - make_interval(days=>r.min_account_age_days) then raise exception 'Umur akun belum memenuhi syarat'; end if;
+ if r.discount_type='percent' then discount:=least(order_amount,order_amount*r.discount_value/100); else discount:=least(order_amount,r.discount_value); end if;
+ return jsonb_build_object('id',r.id,'code',r.code,'discount',discount,'final_amount',greatest(order_amount-discount,0),'is_free',discount>=order_amount);
+end; $$;
