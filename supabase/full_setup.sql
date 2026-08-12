@@ -335,3 +335,50 @@ create policy "owner manage sub products" on public.sub_products for all using (
 create index if not exists sub_products_product_id_idx on public.sub_products(product_id);
 
 alter table public.purchases add column if not exists sub_product_id uuid references public.sub_products(id);
+
+-- Redeem codes / discount system
+create table if not exists public.redeem_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  discount_type text not null check (discount_type in ('percent','fixed')),
+  discount_value numeric(12,2) not null default 0,
+  max_uses integer,
+  used_count integer not null default 0,
+  starts_at timestamptz,
+  expires_at timestamptz,
+  min_account_age_days integer not null default 0,
+  user_id uuid references public.profiles(id) on delete cascade,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.redeem_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  redeem_code_id uuid not null references public.redeem_codes(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  purchase_id uuid references public.purchases(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique(redeem_code_id,user_id)
+);
+alter table public.redeem_codes enable row level security;
+alter table public.redeem_redemptions enable row level security;
+drop policy if exists "owner manage redeem codes" on public.redeem_codes;
+drop policy if exists "owner manage redemptions" on public.redeem_redemptions;
+create policy "owner manage redeem codes" on public.redeem_codes for all using (public.is_staff()) with check (public.is_staff());
+create policy "owner manage redemptions" on public.redeem_redemptions for all using (public.is_staff()) with check (public.is_staff());
+create or replace function public.validate_redeem_code(input_code text, order_amount numeric)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.redeem_codes; p public.profiles; discount numeric:=0;
+begin
+ select * into r from public.redeem_codes where upper(code)=upper(trim(input_code)) and active=true for update;
+ if r.id is null then raise exception 'Redeem code tidak ditemukan atau tidak aktif'; end if;
+ if r.starts_at is not null and now()<r.starts_at then raise exception 'Redeem code belum dapat digunakan'; end if;
+ if r.expires_at is not null and now()>r.expires_at then raise exception 'Redeem code sudah kedaluwarsa'; end if;
+ if r.max_uses is not null and r.used_count>=r.max_uses then raise exception 'Batas penggunaan redeem code sudah tercapai'; end if;
+ if r.user_id is not null and r.user_id<>auth.uid() then raise exception 'Redeem code bukan untuk akun ini'; end if;
+ if exists(select 1 from public.redeem_redemptions where redeem_code_id=r.id and user_id=auth.uid()) then raise exception 'Redeem code sudah pernah digunakan'; end if;
+ select * into p from public.profiles where id=auth.uid();
+ if p.created_at > now() - make_interval(days=>r.min_account_age_days) then raise exception 'Umur akun belum memenuhi syarat'; end if;
+ if r.discount_type='percent' then discount:=least(order_amount,order_amount*r.discount_value/100); else discount:=least(order_amount,r.discount_value); end if;
+ return jsonb_build_object('id',r.id,'code',r.code,'discount',discount,'final_amount',greatest(order_amount-discount,0),'discount_type',r.discount_type,'discount_value',r.discount_value);
+end; $$;
+grant execute on function public.validate_redeem_code(text,numeric) to authenticated;
