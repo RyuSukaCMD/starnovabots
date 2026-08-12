@@ -447,3 +447,32 @@ begin
  if r.discount_type='percent' then discount:=least(order_amount,order_amount*r.discount_value/100); else discount:=least(order_amount,r.discount_value); end if;
  return jsonb_build_object('id',r.id,'code',r.code,'discount',discount,'final_amount',greatest(order_amount-discount,0),'is_free',discount>=order_amount);
 end; $$;
+
+-- Customer service chat
+DO $$ BEGIN alter type public.app_role add value if not exists 'customer_service'; EXCEPTION WHEN others THEN null; END $$;
+create table if not exists public.cs_conversations (
+ id uuid primary key default gen_random_uuid(), user_id uuid not null references public.profiles(id) on delete cascade,
+ assigned_to uuid references public.profiles(id) on delete set null, subject text not null default 'Bantuan Starnova',
+ status text not null default 'open' check(status in ('open','claimed','resolved','confirmed')),
+ rating integer check(rating between 1 and 5), rating_note text, claimed_at timestamptz, resolved_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create table if not exists public.cs_messages (
+ id uuid primary key default gen_random_uuid(), conversation_id uuid not null references public.cs_conversations(id) on delete cascade,
+ sender_id uuid not null references public.profiles(id) on delete cascade, body text not null default '', attachment_url text, created_at timestamptz not null default now()
+);
+alter table public.cs_conversations enable row level security; alter table public.cs_messages enable row level security;
+drop policy if exists "cs conversation user read" on public.cs_conversations; drop policy if exists "cs conversation staff read" on public.cs_conversations; drop policy if exists "cs message participant read" on public.cs_messages; drop policy if exists "cs message participant insert" on public.cs_messages;
+create policy "cs conversation user read" on public.cs_conversations for select using(user_id=auth.uid() or assigned_to=auth.uid());
+create policy "cs conversation staff read" on public.cs_conversations for select using(exists(select 1 from public.profiles where id=auth.uid() and role='customer_service'));
+create policy "cs conversation user insert" on public.cs_conversations for insert with check(user_id=auth.uid());
+create policy "cs conversation participant update" on public.cs_conversations for update using(user_id=auth.uid() or assigned_to=auth.uid()) with check(user_id=auth.uid() or assigned_to=auth.uid());
+create policy "cs message participant read" on public.cs_messages for select using(exists(select 1 from public.cs_conversations c where c.id=conversation_id and (c.user_id=auth.uid() or c.assigned_to=auth.uid() or exists(select 1 from public.profiles where id=auth.uid() and role='customer_service'))));
+create policy "cs message participant insert" on public.cs_messages for insert with check(sender_id=auth.uid() and exists(select 1 from public.cs_conversations c where c.id=conversation_id and (c.user_id=auth.uid() or c.assigned_to=auth.uid())));
+create or replace function public.claim_cs_ticket(ticket_id uuid) returns public.cs_conversations language plpgsql security definer set search_path=public as $$ declare result public.cs_conversations; begin if not exists(select 1 from public.profiles where id=auth.uid() and role='customer_service') then raise exception 'Akses customer service diperlukan'; end if; update public.cs_conversations set assigned_to=auth.uid(),status='claimed',claimed_at=now(),updated_at=now() where id=ticket_id and assigned_to is null and status='open' returning * into result; if result.id is null then raise exception 'Ticket sudah diklaim CS lain'; end if; return result; end; $$;
+create or replace function public.resolve_cs_ticket(ticket_id uuid) returns public.cs_conversations language plpgsql security definer set search_path=public as $$ declare result public.cs_conversations; begin update public.cs_conversations set status='resolved',resolved_at=now(),updated_at=now() where id=ticket_id and assigned_to=auth.uid() returning * into result; if result.id is null then raise exception 'Ticket tidak dapat diselesaikan'; end if; return result; end; $$;
+grant execute on function public.claim_cs_ticket(uuid) to authenticated; grant execute on function public.resolve_cs_ticket(uuid) to authenticated;
+create index if not exists cs_conversations_status_idx on public.cs_conversations(status); create index if not exists cs_messages_conversation_idx on public.cs_messages(conversation_id,created_at);
+insert into storage.buckets(id,name,public) values('chat-attachments','chat-attachments',true) on conflict(id) do update set public=true;
+drop policy if exists "chat attachment read" on storage.objects; drop policy if exists "chat attachment upload" on storage.objects;
+create policy "chat attachment read" on storage.objects for select using(bucket_id='chat-attachments');
+create policy "chat attachment upload" on storage.objects for insert to authenticated with check(bucket_id='chat-attachments' and (storage.foldername(name))[1]=auth.uid()::text);
